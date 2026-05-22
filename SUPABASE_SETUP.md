@@ -84,6 +84,66 @@ aplikacja zapisana/zatwierdzona.
 **8. Odpal nowy build** (Actions → Build APK → Run workflow), zainstaluj, połącz Trakt,
 przetestuj logowanie e-mail.
 
+## WAŻNE: każdy ma swój Trakt (nie współdzielą konta)
+- Trakt Client ID/Secret = tożsamość APLIKACJI, nie konto użytkownika.
+  Wszyscy korzystają z tego samego Client ID (jak w każdym OAuth) — to bezpieczne.
+- Każdy z rodziny robi „Connect Trakt" i loguje się SWOIM kontem na trakt.tv/activate,
+  dostaje WŁASNY token. Historia/scrobble lecą na jego konto.
+- Kod już trzyma tokeny per profil: `accessTokenKey() = profileManager.profileStringKey("trakt_access_token")`.
+- Proxy używa: Twój Client ID (serwerowo) + token usera (nagłówek `x-user-token`).
+- Wniosek: wpisujesz SWÓJ Client ID/Secret raz, działa dla całej rodziny, każdy ma swój Trakt.
+
+## Instrukcja krok-po-kroku (na komputerze, nie telefonie; wymaga Node.js + git)
+
+### 1. Dane z Supabase (app.supabase.com → projekt)
+- Project Settings → General → Reference ID
+- Project Settings → API → Project URL + anon public key
+- Project Settings → Database → hasło do bazy (lub reset)
+
+### 2. Pobierz repo
+```bash
+git clone -b claude/github-access-request-jpjwv https://github.com/pjetrazz/arvio-polish-deflaut-audio-repaires.git
+cd arvio-polish-deflaut-audio-repaires
+```
+
+### 3. CLI + link
+```bash
+npm i -g supabase
+supabase login
+supabase link --project-ref TWOJ_REFERENCE_ID   # poprosi o hasło do bazy
+```
+
+### 4. Baza
+```bash
+supabase db push
+```
+
+### 5. Sekrety serwerowe (naprawia Trakt 403; APP_ANON_KEY == anon key)
+```bash
+supabase secrets set TRAKT_CLIENT_ID=...
+supabase secrets set TRAKT_CLIENT_SECRET=...
+supabase secrets set TMDB_API_KEY=...
+supabase secrets set APP_ANON_KEY=...
+```
+
+### 6. Funkcje
+```bash
+supabase functions deploy trakt-proxy tmdb-proxy cloud-auth-email cloud-auth-reset tv-auth-start tv-auth-status tv-auth-approve tv-auth-complete
+```
+
+### 7. GitHub repo → Settings → Secrets and variables → Actions
+SUPABASE_URL, SUPABASE_ANON_KEY, TRAKT_CLIENT_ID, TRAKT_CLIENT_SECRET, TMDB_API_KEY
+
+### 8. Trakt app (trakt.tv/oauth/applications)
+Redirect URI = `urn:ietf:wg:oauth:2.0:oob`, zapisz.
+
+### 9. Build + test
+Actions → Build APK → Run workflow → zainstaluj APK → Settings → Trakt → Connect (kod zamiast 403),
+Cloud Account → Sign In.
+
+### 10. Rodzina
+Każdy robi Connect Trakt swoim kontem; Client ID wspólny, tokeny/historia osobne.
+
 ## Następny krok przy wznowieniu
 - Zapytać użytkownika, na którym kroku jest / czy są błędy z `db push` lub `functions deploy`.
 - Opcjonalnie: zweryfikować spójność migracji i `cloud-auth-email` pod rejestrację rodziny.
