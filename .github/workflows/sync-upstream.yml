@@ -111,6 +111,26 @@ jobs:
             -keyalg RSA -keysize 2048 -validity 1 \
             -dname "CN=CI" -storepass 815787 -keypass 815787
 
+      - name: Prepare app secrets
+        env:
+          TMDB_API_KEY: ${{ secrets.TMDB_API_KEY }}
+          SUPABASE_URL: ${{ secrets.SUPABASE_URL }}
+          SUPABASE_ANON_KEY: ${{ secrets.SUPABASE_ANON_KEY }}
+          TRAKT_CLIENT_ID: ${{ secrets.TRAKT_CLIENT_ID }}
+          TRAKT_CLIENT_SECRET: ${{ secrets.TRAKT_CLIENT_SECRET }}
+        run: |
+          cp secrets.defaults.properties secrets.properties
+          set_secret() {
+            if [ -n "$2" ]; then
+              sed -i "s|^$1=.*|$1=$2|" secrets.properties
+            fi
+          }
+          set_secret TMDB_API_KEY "$TMDB_API_KEY"
+          set_secret SUPABASE_URL "$SUPABASE_URL"
+          set_secret SUPABASE_ANON_KEY "$SUPABASE_ANON_KEY"
+          set_secret TRAKT_CLIENT_ID "$TRAKT_CLIENT_ID"
+          set_secret TRAKT_CLIENT_SECRET "$TRAKT_CLIENT_SECRET"
+
       - name: Build
         run: ./gradlew assembleSideloadDebug --no-daemon
 
