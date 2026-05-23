@@ -144,6 +144,19 @@ Cloud Account → Sign In.
 ### 10. Rodzina
 Każdy robi Connect Trakt swoim kontem; Client ID wspólny, tokeny/historia osobne.
 
+## WYBRANA DROGA: Integracja Supabase↔GitHub
+Użytkownik ma połączony Supabase z GitHubem i wybrał poleganie na integracji.
+- Integracja sama odpala migracje (i funkcje, jeśli plan pozwala) na push.
+- NIE ustawia sekretów funkcji → trzeba je wpisać ręcznie w dashboardzie
+  (Edge Functions → Secrets): TRAKT_CLIENT_ID, TRAKT_CLIENT_SECRET, TMDB_API_KEY,
+  APP_ANON_KEY (= anon key).
+- Sekrety buildu APK i tak idą do GitHub: SUPABASE_URL, SUPABASE_ANON_KEY,
+  TRAKT_CLIENT_ID, TRAKT_CLIENT_SECRET, TMDB_API_KEY.
+- UWAGA free tier: auto-deploy przez integrację zwykle wymaga Branchingu (plan Pro).
+  Jeśli tabele/funkcje się NIE pojawią → fallback: workflow `.github/workflows/deploy-supabase.yml`
+  (wymaga dodatkowo sekretów SUPABASE_ACCESS_TOKEN, SUPABASE_PROJECT_REF, SUPABASE_DB_PASSWORD).
+- Weryfikacja: Supabase → Database → Tables (czy są tabele) oraz Edge Functions (czy są funkcje).
+
 ## Następny krok przy wznowieniu
 - Zapytać użytkownika, na którym kroku jest / czy są błędy z `db push` lub `functions deploy`.
 - Opcjonalnie: zweryfikować spójność migracji i `cloud-auth-email` pod rejestrację rodziny.
