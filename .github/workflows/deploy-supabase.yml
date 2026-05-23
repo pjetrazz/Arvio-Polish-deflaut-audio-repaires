@@ -1,0 +1,61 @@
+name: Deploy Supabase
+
+# Wdraża backend Supabase (baza + sekrety funkcji + Edge Functions).
+# Uruchom ręcznie: Actions -> Deploy Supabase -> Run workflow.
+#
+# Wymagane sekrety repo (Settings -> Secrets and variables -> Actions):
+#   SUPABASE_ACCESS_TOKEN  - Supabase dashboard -> Account -> Access Tokens
+#   SUPABASE_PROJECT_REF   - Project Settings -> General -> Reference ID
+#   SUPABASE_DB_PASSWORD   - Project Settings -> Database -> hasło bazy
+#   SUPABASE_ANON_KEY      - Project Settings -> API -> anon public
+#   TRAKT_CLIENT_ID        - trakt.tv/oauth/applications
+#   TRAKT_CLIENT_SECRET    - trakt.tv/oauth/applications
+#   TMDB_API_KEY           - themoviedb.org -> Settings -> API
+
+on:
+  workflow_dispatch:
+
+jobs:
+  deploy:
+    name: Deploy database and edge functions
+    runs-on: ubuntu-latest
+    env:
+      SUPABASE_ACCESS_TOKEN: ${{ secrets.SUPABASE_ACCESS_TOKEN }}
+      SUPABASE_DB_PASSWORD: ${{ secrets.SUPABASE_DB_PASSWORD }}
+      PROJECT_REF: ${{ secrets.SUPABASE_PROJECT_REF }}
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up Supabase CLI
+        uses: supabase/setup-cli@v1
+        with:
+          version: latest
+
+      - name: Link project
+        run: supabase link --project-ref "$PROJECT_REF"
+
+      - name: Push database migrations
+        run: supabase db push
+
+      - name: Set edge function secrets
+        env:
+          TRAKT_CLIENT_ID: ${{ secrets.TRAKT_CLIENT_ID }}
+          TRAKT_CLIENT_SECRET: ${{ secrets.TRAKT_CLIENT_SECRET }}
+          TMDB_API_KEY: ${{ secrets.TMDB_API_KEY }}
+          APP_ANON_KEY: ${{ secrets.SUPABASE_ANON_KEY }}
+        run: |
+          supabase secrets set \
+            TRAKT_CLIENT_ID="$TRAKT_CLIENT_ID" \
+            TRAKT_CLIENT_SECRET="$TRAKT_CLIENT_SECRET" \
+            TMDB_API_KEY="$TMDB_API_KEY" \
+            APP_ANON_KEY="$APP_ANON_KEY" \
+            --project-ref "$PROJECT_REF"
+
+      - name: Deploy edge functions
+        run: |
+          supabase functions deploy \
+            trakt-proxy tmdb-proxy cloud-auth-email cloud-auth-reset \
+            tv-auth-start tv-auth-status tv-auth-approve tv-auth-complete \
+            --project-ref "$PROJECT_REF"
