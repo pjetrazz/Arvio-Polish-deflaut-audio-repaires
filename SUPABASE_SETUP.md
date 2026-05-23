@@ -2,6 +2,21 @@
 
 Stan na: 2026-05-22. Branch: `claude/github-access-request-jpjwv`.
 
+## HANDOFF do lokalnego Claude Code
+Ten plik jest punktem przekazania kontekstu z sesji webowej do lokalnego terminala.
+Znane wartości projektu użytkownika:
+- SUPABASE_PROJECT_REF = `pgkycxwalxrkngiaehaa`
+- SUPABASE_URL = `https://pgkycxwalxrkngiaehaa.supabase.co`
+- Użytkownik ma: konto Supabase (free tier), Trakt Client ID + Secret, Supabase połączony z GitHubem.
+- Wybrana droga wdrożenia: integracja Supabase↔GitHub (fallback: workflow `.github/workflows/deploy-supabase.yml`).
+
+PROMPT STARTOWY (wklej jako pierwszą wiadomość do lokalnego Claude Code, odpalonego w tym repo):
+> Przeczytaj SUPABASE_SETUP.md. Kontynuujemy: (1) postawić backend Supabase, (2) naprawić
+> Trakt 403, (3) włączyć konta e-mail dla rodziny. Mam Supabase CLI zalogowane i/lub dodany
+> serwer Supabase MCP. Sprawdź stan projektu (czy są tabele i Edge Functions), powiedz czego
+> brakuje i poprowadź wdrożenie, uruchamiając komendy. Sekretów nie wklejam do czatu.
+
+
 ## Kontekst / status zadań
 
 1. **Polish language fix („None")** — ZROBIONE, wypchnięte (commit `a2c3e13`).
