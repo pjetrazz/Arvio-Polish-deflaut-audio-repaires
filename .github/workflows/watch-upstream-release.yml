@@ -1,0 +1,61 @@
+name: Watch upstream release
+
+# Codziennie sprawdza, czy nasza scalona łatka (PR #261, commit 575ce40 w
+# ProdigyV21/ARVIO) trafiła już do wydania (tagu). Jeśli tak — zakłada Issue
+# z powiadomieniem. Najnowsze wydanie bez łatki w chwili tworzenia: v1.9.93.
+
+on:
+  schedule:
+    - cron: "0 8 * * *"   # codziennie 08:00 UTC
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  issues: write
+
+jobs:
+  check:
+    runs-on: ubuntu-latest
+    env:
+      GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+      UPSTREAM: https://github.com/ProdigyV21/ARVIO.git
+      MERGE_COMMIT: 575ce40
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Check upstream tags for the merged fix
+        run: |
+          set -e
+          git remote add upstream "$UPSTREAM" 2>/dev/null || git remote set-url upstream "$UPSTREAM"
+          git fetch --tags --force upstream
+          git fetch upstream main
+
+          TAGS=$(git tag --contains "$MERGE_COMMIT" 2>/dev/null | sort -V || true)
+          if [ -z "$TAGS" ]; then
+            echo "Fix not in any release tag yet. Nothing to do."
+            exit 0
+          fi
+
+          FIRST=$(echo "$TAGS" | head -1)
+          echo "Fix is included in release tag(s): $TAGS"
+
+          EXISTING=$(gh issue list --state all \
+            --search "in:title Upstream release with default-audio fix" \
+            --json number --jq '.[0].number // empty')
+          if [ -n "$EXISTING" ]; then
+            echo "Notification issue #$EXISTING already exists. Skipping."
+            exit 0
+          fi
+
+          gh issue create \
+            --title "Upstream release with default-audio fix is out: $FIRST" \
+            --body "@pjetrazz Nasza łatka (PR #261, commit \`575ce40\`) trafiła do wydania upstream **$FIRST** w \`ProdigyV21/ARVIO\`.
+
+          Wszystkie tagi, które ją zawierają: $TAGS
+
+          Możesz pobrać oficjalną wersję z tym fixem ze strony Releases twórcy.
+
+          (Issue utworzone automatycznie przez workflow \"Watch upstream release\".)"
