@@ -1,0 +1,142 @@
+name: Sync upstream & build
+
+# Pobiera najnowszy kod z oryginalnego repo (upstream), nakłada na to Twoje
+# zmiany (branding + ewentualna naprawa buga) przez rebase, a po sukcesie buduje
+# APK. Gdy pojawi się konflikt, NIC nie jest nadpisywane ani budowane — zakładane
+# jest Issue z prośbą o ręczną pomoc.
+
+on:
+  schedule:
+    - cron: "0 6 * * *"   # codziennie ~06:00 UTC
+  workflow_dispatch:        # uruchomienie ręczne przyciskiem "Run workflow"
+
+permissions:
+  contents: write
+  issues: write
+
+concurrency:
+  group: sync-upstream
+  cancel-in-progress: false
+
+env:
+  UPSTREAM_REPO: "https://github.com/ProdigyV21/ARVIO.git"
+  TARGET_BRANCH: "claude/github-access-request-jpjwv"
+
+jobs:
+  sync:
+    name: Rebase onto upstream
+    runs-on: ubuntu-latest
+    outputs:
+      conflict: ${{ steps.rebase.outputs.conflict }}
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          ref: ${{ env.TARGET_BRANCH }}
+          fetch-depth: 0
+          persist-credentials: true
+
+      - name: Configure git
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+
+      - name: Fetch upstream
+        run: |
+          git remote add upstream "$UPSTREAM_REPO"
+          git fetch upstream
+          UP_DEFAULT=$(git ls-remote --symref upstream HEAD \
+            | sed -n 's@^ref: refs/heads/\(.*\)[[:space:]]HEAD@\1@p')
+          echo "UP_DEFAULT=${UP_DEFAULT:-main}" >> "$GITHUB_ENV"
+          echo "Upstream default branch: ${UP_DEFAULT:-main}"
+
+      - name: Rebase our changes onto upstream
+        id: rebase
+        run: |
+          set +e
+          git rebase "upstream/${UP_DEFAULT}"
+          code=$?
+          set -e
+          if [ "$code" -ne 0 ]; then
+            git rebase --abort || true
+            echo "conflict=true" >> "$GITHUB_OUTPUT"
+            echo "Rebase conflict - leaving branch untouched."
+          else
+            echo "conflict=false" >> "$GITHUB_OUTPUT"
+          fi
+
+      - name: Open issue on conflict
+        if: steps.rebase.outputs.conflict == 'true'
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          gh issue create \
+            --title "Aktualizacja z upstream: konflikt ($(date +%F))" \
+            --body "Automatyczny rebase na \`upstream/${UP_DEFAULT}\` się nie powiódł z powodu konfliktu. Twoja gałąź **nie** została zmieniona i **nie** zbudowano nowego APK. Potrzebna ręczna pomoc przy połączeniu zmian." \
+            || echo "Nie udało się założyć Issue (kontynuuję)."
+
+      - name: Push rebased branch
+        if: steps.rebase.outputs.conflict == 'false'
+        run: git push --force-with-lease origin "HEAD:${TARGET_BRANCH}"
+
+  build:
+    name: Build sideload debug APK
+    needs: sync
+    if: needs.sync.outputs.conflict == 'false'
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          ref: ${{ env.TARGET_BRANCH }}
+
+      - name: Set up Java
+        uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: "17"
+          cache: gradle
+
+      - name: Prepare local properties
+        env:
+          LOCAL_PROPERTIES_BASE64: ${{ secrets.LOCAL_PROPERTIES_BASE64 }}
+        run: |
+          if [ -n "$LOCAL_PROPERTIES_BASE64" ]; then
+            printf '%s' "$LOCAL_PROPERTIES_BASE64" | base64 --decode > local.properties
+          fi
+
+      - name: Create CI keystore
+        run: |
+          keytool -genkeypair -keystore arvio.jks -alias arvio \
+            -keyalg RSA -keysize 2048 -validity 1 \
+            -dname "CN=CI" -storepass 815787 -keypass 815787
+
+      - name: Prepare app secrets
+        env:
+          TMDB_API_KEY: ${{ secrets.TMDB_API_KEY }}
+          SUPABASE_URL: ${{ secrets.SUPABASE_URL }}
+          SUPABASE_ANON_KEY: ${{ secrets.SUPABASE_ANON_KEY }}
+          TRAKT_CLIENT_ID: ${{ secrets.TRAKT_CLIENT_ID }}
+          TRAKT_CLIENT_SECRET: ${{ secrets.TRAKT_CLIENT_SECRET }}
+        run: |
+          cp secrets.defaults.properties secrets.properties
+          set_secret() {
+            if [ -n "$2" ]; then
+              sed -i "s|^$1=.*|$1=$2|" secrets.properties
+            fi
+          }
+          set_secret TMDB_API_KEY "$TMDB_API_KEY"
+          set_secret SUPABASE_URL "$SUPABASE_URL"
+          set_secret SUPABASE_ANON_KEY "$SUPABASE_ANON_KEY"
+          set_secret TRAKT_CLIENT_ID "$TRAKT_CLIENT_ID"
+          set_secret TRAKT_CLIENT_SECRET "$TRAKT_CLIENT_SECRET"
+
+      - name: Build
+        run: ./gradlew assembleSideloadDebug --no-daemon
+
+      - name: Upload APK
+        uses: actions/upload-artifact@v4
+        with:
+          name: arvio-sideload-debug
+          path: app/build/outputs/apk/sideload/debug/*.apk
+          if-no-files-found: error
